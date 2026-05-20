@@ -1,28 +1,49 @@
 import streamlit as st
+import subprocess
+import sqlite3
+import hashlib
 
-# VULNERABILITY 1: Hardcoded credentials in source code
-VALID_USER = "admin"
-VALID_PASS = "Admin@123!"
+# VULNERABILITY 1: Hardcoded Secrets
+# Semgrep rule: python.lang.security.audit.hardcoded-password
+DB_PASSWORD = "super_secret_db_password_123"
+AWS_ACCESS_KEY = "AKIAIOSFODNN7EXAMPLE" 
 
-st.title("Internal Employee Portal")
+st.title("Vulnerable App for SAST (Semgrep)")
 
-# VULNERABILITY 2: Information Disclosure (Leaking test credentials on frontend)
-st.caption("TODO: Remove dev account test/test1234 before deploying to production")
+# VULNERABILITY 2: SQL Injection (SQLi)
+st.header("1. User Search (SQLi)")
+username_search = st.text_input("Search Username:")
+if st.button("Search"):
+    conn = sqlite3.connect(':memory:')
+    cursor = conn.cursor()
+    cursor.execute("CREATE TABLE users (id INTEGER, name TEXT)")
+    cursor.execute("INSERT INTO users VALUES (1, 'admin'), (2, 'testuser')")
+    
+    # Semgrep rule: python.lang.security.audit.sqli.sqlite3-sqli
+    query = f"SELECT * FROM users WHERE name = '{username_search}'"
+    try:
+        cursor.execute(query) 
+        st.write(cursor.fetchall())
+    except Exception as e:
+        st.error(f"Error: {e}")
 
-username = st.text_input("Username")
-password = st.text_input("Password", type="password")
+# VULNERABILITY 3: Command Injection
+st.header("2. Network Diagnostic (Command Injection)")
+target_ip = st.text_input("Enter IP to ping (e.g., 8.8.8.8):")
+if st.button("Ping"):
+    # Semgrep rule: python.lang.security.audit.subprocess-shell-true
+    command = f"ping -c 1 {target_ip}"
+    try:
+        result = subprocess.check_output(command, shell=True, text=True)
+        st.code(result)
+    except Exception as e:
+        st.error("Ping failed")
 
-if st.button("Secure Login"):
-    if (username == VALID_USER and password == VALID_PASS) or (username == "test" and password == "test1234"):
-        st.success("Login successful")
-        
-        # VULNERABILITY 3: Leaking sensitive config details upon login
-        st.write("System Configuration Exposed:")
-        st.json({
-            "db_user": "root", 
-            "db_pass": "password123", 
-            "env": "development", 
-            "server_ip": "192.168.1.50"
-        })
-    else:
-        st.error("Invalid credentials")
+# VULNERABILITY 4: Weak Cryptography (MD5)
+st.header("3. Hash Generator (Weak Crypto)")
+password_input = st.text_input("Enter text to hash:", type="password")
+if st.button("Hash"):
+    # Semgrep rule: python.lang.security.audit.insecure-hash-algorithms
+    hasher = hashlib.md5() 
+    hasher.update(password_input.encode('utf-8'))
+    st.write(f"MD5 Hash: {hasher.hexdigest()}")
